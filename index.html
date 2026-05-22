@@ -1,48 +1,371 @@
-
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Veilcrawl</title>
+
 <style>
-body{
+html,body{
 margin:0;
 overflow:hidden;
 background:black;
+touch-action:none;
 }
+
 canvas{
 display:block;
 }
+
+#ui{
+position:fixed;
+top:10px;
+left:10px;
+color:white;
+font-family:Arial;
+font-size:18px;
+z-index:10;
+}
+
+#pauseBtn{
+position:fixed;
+top:10px;
+right:10px;
+padding:12px;
+background:#8c6cff;
+border:none;
+border-radius:10px;
+color:white;
+font-weight:bold;
+z-index:10;
+}
 </style>
 </head>
+
 <body>
+
+<div id="ui">
+HP: <span id="hp">100</span>
+</div>
+
+<button id="pauseBtn">Pause</button>
 
 <canvas id="game"></canvas>
 
 <script>
 
-var canvas=document.getElementById("game");
-var ctx=canvas.getContext("2d");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-canvas.width=window.innerWidth;
-canvas.height=window.innerHeight;
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-var x=100;
-var y=100;
+const TILE = 48;
+const MAP_W = 50;
+const MAP_H = 50;
 
-window.addEventListener("touchstart",function(e){
-x=e.touches[0].clientX;
-y=e.touches[0].clientY;
+let paused = false;
+
+const player = {
+x: 5,
+y: 5,
+hp: 100,
+color: "#8c6cff"
+};
+
+const enemies = [];
+
+const map = [];
+
+function randWall(){
+return Math.random() < 0.18 ? 1 : 0;
+}
+
+function generateMap(){
+
+for(let y=0;y<MAP_H;y++){
+
+const row = [];
+
+for(let x=0;x<MAP_W;x++){
+
+if(
+x===0 ||
+y===0 ||
+x===MAP_W-1 ||
+y===MAP_H-1
+){
+row.push(1);
+}else{
+row.push(randWall());
+}
+
+}
+
+map.push(row);
+
+}
+
+}
+
+generateMap();
+
+function spawnEnemies(){
+
+for(let i=0;i<20;i++){
+
+enemies.push({
+x: Math.floor(Math.random()*MAP_W),
+y: Math.floor(Math.random()*MAP_H),
+hp: 20
 });
+
+}
+
+}
+
+spawnEnemies();
+
+function move(dx,dy){
+
+const nx = player.x + dx;
+const ny = player.y + dy;
+
+if(
+nx < 0 ||
+ny < 0 ||
+nx >= MAP_W ||
+ny >= MAP_H
+){
+return;
+}
+
+if(map[ny][nx] === 1){
+return;
+}
+
+for(let e of enemies){
+
+if(e.hp <= 0) continue;
+
+if(e.x === nx && e.y === ny){
+
+e.hp -= 10;
+
+if(e.hp <= 0){
+saveGame();
+}
+
+return;
+}
+
+}
+
+player.x = nx;
+player.y = ny;
+
+saveGame();
+
+}
+
+window.addEventListener("keydown",e=>{
+
+if(paused) return;
+
+if(e.key==="w") move(0,-1);
+if(e.key==="s") move(0,1);
+if(e.key==="a") move(-1,0);
+if(e.key==="d") move(1,0);
+
+});
+
+window.addEventListener("touchstart",e=>{
+
+if(paused) return;
+
+const tx = e.touches[0].clientX;
+const ty = e.touches[0].clientY;
+
+const cx = canvas.width/2;
+const cy = canvas.height/2;
+
+const dx = tx - cx;
+const dy = ty - cy;
+
+if(Math.abs(dx) > Math.abs(dy)){
+
+if(dx > 0){
+move(1,0);
+}else{
+move(-1,0);
+}
+
+}else{
+
+if(dy > 0){
+move(0,1);
+}else{
+move(0,-1);
+}
+
+}
+
+});
+
+document.getElementById("pauseBtn").onclick = function(){
+paused = !paused;
+};
+
+function fogDistance(x,y){
+
+const dx = x-player.x;
+const dy = y-player.y;
+
+return Math.sqrt(dx*dx+dy*dy);
+
+}
+
+function enemyAI(){
+
+for(let e of enemies){
+
+if(e.hp <= 0) continue;
+
+const dx = player.x - e.x;
+const dy = player.y - e.y;
+
+if(Math.abs(dx)+Math.abs(dy) < 8){
+
+if(Math.abs(dx) > Math.abs(dy)){
+
+e.x += dx > 0 ? 1 : -1;
+
+}else{
+
+e.y += dy > 0 ? 1 : -1;
+
+}
+
+}
+
+if(e.x === player.x && e.y === player.y){
+
+player.hp -= 1;
+
+document.getElementById("hp").innerText = player.hp;
+
+if(player.hp <= 0){
+
+alert("You Died");
+
+player.hp = 100;
+player.x = 5;
+player.y = 5;
+
+}
+
+}
+
+}
+
+}
+
+function draw(){
+
+ctx.fillStyle = "black";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+const camX = player.x*TILE - canvas.width/2;
+const camY = player.y*TILE - canvas.height/2;
+
+for(let y=0;y<MAP_H;y++){
+for(let x=0;x<MAP_W;x++){
+
+const dist = fogDistance(x,y);
+
+if(dist > 7) continue;
+
+ctx.globalAlpha = Math.max(0.2,1-dist/7);
+
+ctx.fillStyle =
+map[y][x]===1
+? "#1a1a1a"
+: "#2f2f38";
+
+ctx.fillRect(
+x*TILE-camX,
+y*TILE-camY,
+TILE,
+TILE
+);
+
+}
+}
+
+ctx.globalAlpha = 1;
+
+for(let e of enemies){
+
+if(e.hp <= 0) continue;
+
+ctx.fillStyle = "#b3003c";
+
+ctx.fillRect(
+e.x*TILE-camX+8,
+e.y*TILE-camY+8,
+TILE-16,
+TILE-16
+);
+
+}
+
+ctx.fillStyle = player.color;
+
+ctx.fillRect(
+player.x*TILE-camX+4,
+player.y*TILE-camY+4,
+TILE-8,
+TILE-8
+);
+
+}
+
+function saveGame(){
+
+localStorage.setItem(
+"veilcrawl-save",
+JSON.stringify(player)
+);
+
+}
+
+function loadGame(){
+
+const s =
+localStorage.getItem("veilcrawl-save");
+
+if(!s) return;
+
+const data = JSON.parse(s);
+
+player.x = data.x;
+player.y = data.y;
+player.hp = data.hp;
+
+}
+
+loadGame();
 
 function loop(){
 
-ctx.fillStyle="black";
-ctx.fillRect(0,0,canvas.width,canvas.height);
+if(!paused){
+enemyAI();
+}
 
-ctx.fillStyle="#8c6cff";
-ctx.fillRect(x,y,50,50);
+draw();
 
 requestAnimationFrame(loop);
+
 }
 
 loop();
