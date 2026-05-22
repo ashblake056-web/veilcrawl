@@ -6,28 +6,29 @@ document.getElementById("game");
 const ctx =
 canvas.getContext("2d");
 
-canvas.width =
-window.innerWidth;
-
-canvas.height =
-window.innerHeight;
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
 const TILE = 48;
-const MAP_W = 60;
-const MAP_H = 60;
+const MAP_W = 80;
+const MAP_H = 80;
 
 let paused = false;
 
 const player = {
-x:5,
-y:5,
+x:10,
+y:10,
 hp:100,
-gold:0
+gold:0,
+xp:0,
+level:1
 };
 
+const map = [];
 const enemies = [];
 const loot = [];
-const map = [];
+
+let lastEnemyMove = 0;
 
 function createRoom(x,y,w,h){
 
@@ -62,13 +63,13 @@ map.push(row);
 
 }
 
-for(let i=0;i<18;i++){
+for(let i=0;i<22;i++){
 
 const w =
-4 + Math.floor(Math.random()*8);
+5 + Math.floor(Math.random()*10);
 
 const h =
-4 + Math.floor(Math.random()*8);
+5 + Math.floor(Math.random()*10);
 
 const x =
 1 + Math.floor(
@@ -88,15 +89,44 @@ createRoom(x,y,w,h);
 
 generateMap();
 
+function validSpawn(x,y){
+
+if(map[y][x] === 1){
+return false;
+}
+
+if(
+Math.abs(x-player.x) < 6 &&
+Math.abs(y-player.y) < 6
+){
+return false;
+}
+
+return true;
+
+}
+
 function spawnEnemies(){
 
-for(let i=0;i<30;i++){
+for(let i=0;i<35;i++){
+
+let ex,ey;
+
+do{
+
+ex =
+Math.floor(Math.random()*MAP_W);
+
+ey =
+Math.floor(Math.random()*MAP_H);
+
+}while(!validSpawn(ex,ey));
 
 enemies.push({
-x:Math.floor(Math.random()*MAP_W),
-y:Math.floor(Math.random()*MAP_H),
-hp:Math.random()<0.15?50:20,
-elite:Math.random()<0.15
+x:ex,
+y:ey,
+hp:Math.random()<0.12?60:25,
+elite:Math.random()<0.12
 });
 
 }
@@ -109,9 +139,21 @@ function spawnLoot(){
 
 for(let i=0;i<20;i++){
 
+let lx,ly;
+
+do{
+
+lx =
+Math.floor(Math.random()*MAP_W);
+
+ly =
+Math.floor(Math.random()*MAP_H);
+
+}while(map[ly][lx]===1);
+
 loot.push({
-x:Math.floor(Math.random()*MAP_W),
-y:Math.floor(Math.random()*MAP_H),
+x:lx,
+y:ly,
 taken:false
 });
 
@@ -145,10 +187,21 @@ if(e.hp <= 0) continue;
 
 if(e.x === nx && e.y === ny){
 
-e.hp -= 10;
+e.hp -= 15;
 
 if(e.hp <= 0){
+
 player.gold += 10;
+player.xp += 15;
+
+if(player.xp >= 100){
+
+player.level++;
+player.hp = 100;
+player.xp = 0;
+
+}
+
 }
 
 return;
@@ -169,7 +222,7 @@ item.x === player.x &&
 item.y === player.y
 ){
 
-player.hp += 20;
+player.hp += 25;
 
 if(player.hp > 100){
 player.hp = 100;
@@ -184,17 +237,6 @@ item.taken = true;
 saveGame();
 
 }
-
-window.addEventListener("keydown",e=>{
-
-if(paused) return;
-
-if(e.key==="w") move(0,-1);
-if(e.key==="s") move(0,1);
-if(e.key==="a") move(-1,0);
-if(e.key==="d") move(1,0);
-
-});
 
 window.addEventListener("touchstart",e=>{
 
@@ -248,6 +290,14 @@ return Math.sqrt(dx*dx+dy*dy);
 
 function enemyAI(){
 
+const now = Date.now();
+
+if(now-lastEnemyMove < 350){
+return;
+}
+
+lastEnemyMove = now;
+
 for(let e of enemies){
 
 if(e.hp <= 0) continue;
@@ -255,12 +305,26 @@ if(e.hp <= 0) continue;
 const dx = player.x-e.x;
 const dy = player.y-e.y;
 
-if(Math.abs(dx)+Math.abs(dy)<8){
+if(Math.abs(dx)+Math.abs(dy) < 7){
 
 if(Math.abs(dx)>Math.abs(dy)){
-e.x += dx>0?1:-1;
+
+const nx =
+e.x + (dx>0?1:-1);
+
+if(map[e.y][nx]===0){
+e.x = nx;
+}
+
 }else{
-e.y += dy>0?1:-1;
+
+const ny =
+e.y + (dy>0?1:-1);
+
+if(map[ny][e.x]===0){
+e.y = ny;
+}
+
 }
 
 }
@@ -270,25 +334,32 @@ e.x === player.x &&
 e.y === player.y
 ){
 
-player.hp -= e.elite ? 2 : 1;
+player.hp -= e.elite ? 8 : 3;
 
 if(player.hp <= 0){
 
-alert("You Died");
+alert(
+"YOU DIED
+Gold: " +
+player.gold +
+"
+Level: " +
+player.level
+);
 
 player.hp = 100;
-player.x = 5;
-player.y = 5;
+player.gold = 0;
+player.level = 1;
+player.xp = 0;
+
+player.x = 10;
+player.y = 10;
 
 }
 
 }
 
 }
-
-document.getElementById(
-"hp"
-).innerText = player.hp;
 
 }
 
@@ -315,15 +386,15 @@ for(let x=0;x<MAP_W;x++){
 const dist =
 fogDistance(x,y);
 
-if(dist > 7) continue;
+if(dist > 8) continue;
 
 ctx.globalAlpha =
-Math.max(0.2,1-dist/7);
+Math.max(0.15,1-dist/8);
 
 ctx.fillStyle =
 map[y][x]===1
-? "#151515"
-: "#2c2c35";
+? "#111"
+: "#24242d";
 
 ctx.fillRect(
 x*TILE-camX,
@@ -342,7 +413,7 @@ if(item.taken) continue;
 const dist =
 fogDistance(item.x,item.y);
 
-if(dist > 7) continue;
+if(dist > 8) continue;
 
 ctx.fillStyle = "#00d48a";
 
@@ -351,7 +422,7 @@ ctx.beginPath();
 ctx.arc(
 item.x*TILE-camX+TILE/2,
 item.y*TILE-camY+TILE/2,
-8,
+10,
 0,
 Math.PI*2
 );
@@ -367,7 +438,7 @@ if(e.hp <= 0) continue;
 const dist =
 fogDistance(e.x,e.y);
 
-if(dist > 7) continue;
+if(dist > 8) continue;
 
 ctx.fillStyle =
 e.elite
@@ -399,6 +470,21 @@ TILE-8,
 TILE-8
 );
 
+ctx.fillStyle = "white";
+
+ctx.font = "18px Arial";
+
+ctx.fillText(
+"LV " + player.level +
+"  GOLD " + player.gold,
+20,
+60
+);
+
+document.getElementById(
+"hp"
+).innerText = player.hp;
+
 }
 
 function saveGame(){
@@ -419,13 +505,14 @@ localStorage.getItem(
 
 if(!save) return;
 
-const data =
-JSON.parse(save);
+const data = JSON.parse(save);
 
 player.x = data.x;
 player.y = data.y;
 player.hp = data.hp;
 player.gold = data.gold;
+player.level = data.level || 1;
+player.xp = data.xp || 0;
 
 }
 
